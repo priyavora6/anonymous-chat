@@ -6,7 +6,7 @@ A full-stack web application implementing **Controlled Anonymity** with React fr
 
 🎭 **Controlled Anonymity** - Pseudonymous profiles, no real identity  
 📸 **Camera Verification** - Delete-after-verify (no image persistence)  
-🎯 **Smart Matching** - Gender-filtered queues with daily fairness limits  
+🎯 **Smart Matching** - Gender-filtered queues with daily fairness limits (5/day)  
 🔐 **Privacy First** - Ephemeral messages, no chat history preserved  
 📱 **Real-time Chat** - WebSocket-based instant messaging  
 
@@ -60,8 +60,8 @@ file: (binary image blob)
 **Response:**
 ```json
 {
-  "device_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "gender": "male" | "female"
+   "device_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+   "gender": "male" | "female" | "prefer-not-to-say"
 }
 ```
 
@@ -114,7 +114,7 @@ const ws = new WebSocket('ws://localhost:8000/ws?device_id=YOUR-DEVICE-ID');
    ```json
    {
      "action": "join",
-     "filter": "any" | "male" | "female",
+     "filter": "any" | "male" | "female" | "prefer-not-to-say",
      "nickname": "AnonymousUser"
    }
    ```
@@ -171,7 +171,7 @@ const ws = new WebSocket('ws://localhost:8000/ws?device_id=YOUR-DEVICE-ID');
        "nickname": "Stranger",
        "gender": "female"
      },
-     "peer_gender": "female"
+     "peer_gender": "female" | "prefer-not-to-say"
    }
    ```
 
@@ -246,7 +246,7 @@ devices = {
         "gender": "male",
         "nickname": "Anon123",
         "last_join": 1234567890.0,
-        "daily_counts": {"date": "2026-02-03", "male": 2, "female": 1},
+      "daily_counts": {"date": "2026-02-03", "male": 2, "female": 1, "prefer-not-to-say": 0},
     }
 }
 
@@ -256,18 +256,21 @@ active_pairs = {
 }
 
 queues = {
-    "any": [("device-id-3", websocket), ...],
-    "male": [...],
-    "female": [...]
+   "any": [("device-id-3", websocket), ...],
+   "male": [...],
+   "female": [...],
+   "prefer-not-to-say": [...]
 }
 ```
 
 ### Matching Algorithm
 
-1. New client joins queue with `filter` preference (any/male/female)
+1. New client joins queue with `filter` preference (any/male/female/prefer-not-to-say)
 2. Server locks state and searches existing queues for compatible match
 3. Compatibility check:
    - If filter="male", peer must be male
+   - If filter="female", peer must be female
+   - If filter="prefer-not-to-say", peer must be prefer-not-to-say
    - If filter="any", any gender matches
 4. If match found:
    - Remove peer from queue
@@ -290,12 +293,13 @@ queues = {
 
 ## Fairness & Limits
 
-- **Daily Match Limit:** 5 matches per gender preference per day
+- **Daily Match Limit:** 6 matches per gender preference per day
 - **Cooldown:** 5 seconds between join attempts per user
 - **Filter Rules:**
-  - `filter="any"` - matches any gender
-  - `filter="male"` - matches only males
-  - `filter="female"` - matches only females
+   - `filter="any"` - matches any gender
+   - `filter="male"` - matches only males
+   - `filter="female"` - matches only females
+   - `filter="prefer-not-to-say"` - matches only prefer-not-to-say
 
 ---
 
@@ -329,7 +333,7 @@ async def verify(device_id: str = Query(...), file: UploadFile = File(...)):
 class Device:
     id: int                    # Primary key
     device_id: str            # Unique identifier
-    gender: str | None        # "male", "female", or None
+   gender: str | None        # "male", "female", or "prefer-not-to-say"
     created_at: float         # Unix timestamp
     updated_at: float         # Unix timestamp
 ```
@@ -370,30 +374,11 @@ Edit `backend/app/main.py`:
 
 ```
 anonymous-chat/
-├── frontend/
-│   ├── public/
-│   │   ├── index.html              # React mount point
-│   │   └── manifest.json           # PWA manifest
-│   ├── src/
-│   │   ├── index.js                # Entry point (ReactDOM.render)
-│   │   ├── App.jsx                 # Main app component
-│   │   ├── Chat.jsx                # Chat UI & WebSocket handler
-│   │   ├── styles.css              # Global stylesheet
-│   │   ├── components/
-│   │   │   ├── CameraCapture.jsx     # Camera + profile form
-│   │   │   ├── ChatInterface.jsx     # Chat UI skeleton
-│   │   │   ├── MatchingQueue.jsx     # Queue UI skeleton
-│   │   │   └── ProfileSetup.jsx      # Profile editor
-│   │   └── utils/
-│   │       ├── fingerprint.js        # Device ID management
-│   │       └── socket.js             # WebSocket factory
-│   └── package.json                # npm dependencies
-│
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI app + endpoints
 │   │   ├── database.py             # SQLAlchemy async setup
-│   │   ├── models.py               # DB models (Device, Report)
+│   │   ├── models.py               # DB models (Device, Report, DailyLimit)
 │   │   └── init_db.py              # Create tables script
 │   ├── main.py                     # Uvicorn runner
 │   ├── ai_verification.py          # Placeholder for ML classifier
@@ -401,9 +386,35 @@ anonymous-chat/
 │   ├── websocket.py                # WebSocket helpers (optional)
 │   ├── database.py                 # DB utilities (optional)
 │   ├── models.py                   # DB models duplicate (optional)
-│   ├── requirements.txt             # Python dependencies
-│   └── README.md                   # Backend-specific docs
+│   ├── requirements.txt            # Python dependencies
+│   ├── setup.bat                   # Windows setup helper
+│   ├── setup.ps1                   # PowerShell setup helper
+│   ├── GENDER_DETECTION_SETUP.md   # Gender detection notes
+│   └── test_gender_detection.py    # Test script
 │
+├── frontend/
+│   ├── public/
+│   │   ├── index.html              # React mount point
+│   │   └── manifest.json           # PWA manifest
+│   ├── src/
+│   │   ├── index.js                # Entry point
+│   │   ├── main.jsx                # App bootstrap
+│   │   ├── App.jsx                 # Main app component
+│   │   ├── CameraVerify.jsx        # Verification page shell
+│   │   ├── Chat.jsx                # Chat UI & WebSocket handler
+│   │   ├── styles.css              # Global stylesheet
+│   │   ├── components/
+│   │   │   ├── CameraCapture.jsx   # Camera + profile form
+│   │   │   ├── ChatInterface.jsx   # Chat UI skeleton
+│   │   │   ├── MatchingQueue.jsx   # Queue UI skeleton
+│   │   │   └── ProfileSetup.jsx    # Profile editor
+│   │   └── utils/
+│   │       ├── fingerprint.js      # Device ID management
+│   │       └── socket.js           # WebSocket factory
+│   ├── package.json                # npm dependencies
+│   └── build/                       # Production build output
+│
+├── package-lock.json
 └── README.md                        # This file
 ```
 
