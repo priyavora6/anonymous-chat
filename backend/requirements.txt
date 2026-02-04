@@ -1,0 +1,14 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pysqlite3-binary==0.7.0 ; python_version < "3.11"
+sqlalchemy>=2.0.28
+pydantic>=1.10.0
+python-dotenv>=1.0.0
+typing-extensions
+aioredis>=2.0.0
+aiosqlite>=0.18.0
+mediapipe>=0.10.0
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
+numpy>=1.21.0
